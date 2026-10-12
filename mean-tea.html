@@ -531,492 +531,215 @@ footer{border-top:1px solid var(--border);padding:12px 16px;display:flex;justify
 <canvas id="bat-canvas"></canvas>
 <div class="bat-toast" id="bat-toast">// fuck.<br>you hit our 10% off bat.<br>your entire cart will now be<br>10% off at checkout. dick.</div>
 
-<script>
-var PRODS = [
-  {id:0,num:"// no. 001",name:"Morning Mayhem",tag:"Irish Breakfast, Vanilla Bean",desc:"A breakfast tea that does not apologize for itself. Irish breakfast base, vanilla bean. Dark enough to mean it, smooth enough to repeat.",rat:"5/5 - 4.9",reg:"Assam, India",fmt:"Loose leaf, 50g",stk:"In stock - 47 left",price:14,type:"tea"},
-  {id:1,num:"// no. 002",name:"Green Static",tag:"Sencha, Lemon Myrtle",desc:"Sharp, clean, unfiltered. Sencha brings structure, lemon myrtle cuts through the noise.",rat:"4.5/5 - 4.7",reg:"Kyoto, Japan",fmt:"Loose leaf, 50g",stk:"In stock - 31 left",price:14,type:"tea"},
-  {id:10,num:"// merch 001",name:"Mean Tee",tag:"Apparel",desc:"100% cotton, screen printed. Black. Runs slightly aggressive. Unisex sizing.",rat:"n/a",reg:"Made in USA",fmt:"S / M / L / XL",stk:"In stock",price:32,type:"merch"},
-  {id:11,num:"// merch 002",name:"Mean Mug",tag:"Ceramics",desc:"12oz ceramic mug. No motivational quotes. No funny sayings. Just a mug.",rat:"n/a",reg:"Made in USA",fmt:"12oz",stk:"In stock",price:18,type:"merch"},
-  {id:12,num:"// merch 003",name:"Mean Tote",tag:"Accessories",desc:"Heavy canvas tote. Fits a lot. Unbranded on the back because we are not a billboard.",rat:"n/a",reg:"Made in USA",fmt:"15 x 16in",stk:"In stock",price:24,type:"merch"},
-  {id:13,num:"// merch 004",name:"Chaos Zine Vol.1",tag:"Print",desc:"Hand-numbered, photocopied, 28 pages. First edition. Will not be reprinted.",rat:"n/a",reg:"Pasadena, CA",fmt:"5.5 x 8.5in",stk:"42 left",price:8,type:"merch"}
-];
-var cart = {};
-var cur = 0;
-var flameRunning = false;
-var flameAnim = null;
-var frRating = 0;
-var frCollapsed = false;
-var lastEmail = "";
 
-function go(pg) {
-  var all = document.querySelectorAll(".page");
-  for (var i = 0; i < all.length; i++) all[i].classList.remove("active");
-  document.getElementById("page-" + pg).classList.add("active");
-  window.scrollTo(0,0);
+<style>
+#fo-fire{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9000;opacity:0;transition:opacity 1.2s}
+#fo-fire.on{opacity:1}
+.fo-piece{position:fixed;margin:0;z-index:8000;will-change:transform;pointer-events:none;box-sizing:border-box;transform-origin:50% 50%;overflow:hidden}
+#fo-copy{position:fixed;left:0;right:0;top:18vh;z-index:9500;text-align:center;padding:0 24px;font-family:'Geist Mono',monospace;font-weight:400;font-size:16px;line-height:1.5;letter-spacing:0;color:#111;opacity:0;transition:opacity .8s;pointer-events:none;text-shadow:none}
+#fo-copy.on{opacity:1}
+body.fo-done{overflow:hidden;background:#000!important}
+body.fo-go{background:#000!important;transition:background 1s}
+body.fo-go .site{visibility:hidden}
+</style>
+<canvas id="fo-fire"></canvas>
+<div id="fo-copy">lol, gotcha.<br>Mean tea is still under construction.</div>
+
+<script>
+
+function runFallApart(win) {
+const document = win.document;
+const getComputedStyle = win.getComputedStyle.bind(win);
+const requestAnimationFrame = win.requestAnimationFrame.bind(win);
+const navigator = win.navigator;
+
+var reduce = win.matchMedia && win.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var DELAY = 3500;
+var mobile = Math.min(win.innerWidth, win.innerHeight) < 600 || /Mobi|Android|iPhone/i.test(navigator.userAgent);
+var params = new URLSearchParams("");
+if (params.get("nofo")) return;
+
+function inView(r){ return r.width>1 && r.height>1 && r.bottom>0 && r.top<win.innerHeight && r.right>0 && r.left<win.innerWidth; }
+function isLeaf(el){
+  for (var i=0;i<el.children.length;i++){
+    var t=el.children[i].tagName;
+    if (t!=="BR" && t!=="SPAN" && t!=="B" && t!=="I" && t!=="EM" && t!=="A" && t!=="IMG" && t!=="SVG") return false;
+  }
+  return true;
+}
+function collect(){
+  var out=[];
+  var roots=[document.querySelector("nav"), document.querySelector(".modebar"), document.querySelector("#page-home")];
+  roots.forEach(function(root){
+    if(!root) return;
+    var all=[root].concat([].slice.call(root.querySelectorAll("*")));
+    all.forEach(function(el){
+      var cs=getComputedStyle(el);
+      if (cs.display==="none"||cs.visibility==="hidden") return;
+      if (el.tagName==="CANVAS"||el.tagName==="SCRIPT"||el.tagName==="STYLE") return;
+      var r=el.getBoundingClientRect();
+      if(!inView(r)) return;
+      var leaf=isLeaf(el);
+      var hasBox = cs.borderTopWidth!=="0px"||cs.borderBottomWidth!=="0px"||cs.borderLeftWidth!=="0px"||cs.borderRightWidth!=="0px"||(cs.backgroundColor!=="rgba(0, 0, 0, 0)");
+      if (leaf){ out.push({el:el,r:r,shallow:false,leaf:true}); }
+      else if (hasBox){ out.push({el:el,r:r,shallow:true}); }
+    });
+  });
+  // drop nested leaves inside leaves (e.g. span inside leaf already part of leaf)
+  out = out.filter(function(a){ return !out.some(function(b){ return b!==a && b.leaf && !a.shallow && b.el!==a.el && b.el.contains(a.el); }); });
+  if (mobile && out.length>48){
+    // keep boxes, drop random extras to cap work on phones
+    var keep=out.filter(function(p){return p.shallow;});
+    var leaves=out.filter(function(p){return !p.shallow;});
+    leaves.sort(function(){return Math.random()-.5;});
+    out = keep.concat(leaves.slice(0, Math.max(0,48-keep.length)));
+  }
+  return out;
 }
 
-// ── 8-BIT BAT SYSTEM ─────────────────────────────────────────
-var batDiscount = false;
-var batsRunning = false;
-var batAnim = null;
-var batsPaused = false;
-var bats = [];
-var _batClickHandler = null;
+var visBottom=0;
+try{
+  var sent=document.createElement("div");
+  sent.style.cssText="position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;visibility:hidden;z-index:-1";
+  document.body.appendChild(sent);
+  var th=[];for(var ti=0;ti<=20;ti++)th.push(ti/20);
+  new win.IntersectionObserver(function(es){ var e=es[es.length-1]; visBottom=e.intersectionRect.height>0?e.intersectionRect.bottom:0; },{threshold:th}).observe(sent);
+}catch(e){}
+function getFloor(){
+  var h=win.innerHeight;
+  if(visBottom>260 && visBottom<h) return Math.round(visBottom);
+  return h;
+}
+function showFinal(){
+  document.body.classList.add("fo-done");
+  document.querySelector(".site").style.visibility="hidden";
+  document.getElementById("fo-copy").classList.add("on");
+}
 
-var BAT_PX = 3;
-var BAT_FRAMES = [
-  // frame 0 — wings up
-  [
-    [0,1,0,0,0,0,0,0,0,0,1,0],
-    [1,1,1,0,0,0,0,0,0,1,1,1],
-    [0,1,1,1,1,1,1,1,1,1,1,0],
-    [0,0,0,1,1,0,0,1,1,0,0,0],
-    [0,0,0,0,1,0,0,1,0,0,0,0]
-  ],
-  // frame 1 — wings down
-  [
-    [0,0,0,0,0,0,0,0,0,0,0,0],
-    [0,0,1,0,0,0,0,0,0,1,0,0],
-    [0,1,1,1,1,1,1,1,1,1,1,0],
-    [1,1,0,1,1,0,0,1,1,0,1,1],
-    [0,0,0,0,1,0,0,1,0,0,0,0]
-  ]
-];
-var BAT_COLS = BAT_FRAMES[0][0].length;
-var BAT_ROWS_H = BAT_FRAMES[0].length;
-var BAT_W = BAT_COLS * BAT_PX;
-var BAT_H = BAT_ROWS_H * BAT_PX;
-
-function startBats() {
-  if (batsRunning) return;
-  batsRunning = true;
-  batsPaused = false;
-
-  bats = [
-    {t:0,   freqX:0.01105, freqY:0.01785, phX:0,         phY:0,        frame:0, ftick:0, trail:[], x:0, y:0},
-    {t:120, freqX:0.0153,  freqY:0.0119,  phX:Math.PI*0.7, phY:Math.PI, frame:1, ftick:5, trail:[], x:0, y:0}
-  ];
-
-  var canvas = document.getElementById("bat-canvas");
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-  var ctx = canvas.getContext("2d");
-
-  function frame() {
-    if (!batsRunning) return;
-
-    var site = document.querySelector(".site");
-    var sr   = site.getBoundingClientRect();
-    var cx   = sr.left + sr.width  / 2;
-    var cy   = sr.top  + sr.height / 2;
-    var rx   = sr.width  * 0.38;
-    var ry   = sr.height * 0.36;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    for (var i = 0; i < bats.length; i++) {
-      var b = bats[i];
-
-      if (!batsPaused) {
-        b.t++;
-        b.x = cx + rx * Math.sin(b.freqX * b.t + b.phX);
-        b.y = cy + ry * Math.sin(b.freqY * b.t + b.phY);
-        b.ftick++;
-        if (b.ftick % 10 === 0) b.frame = 1 - b.frame;
-        b.trail.push({x: b.x, y: b.y});
-        if (b.trail.length > 28) b.trail.shift();
+// ── fire: same 8-bit pixel engine as Super Hell mode (palette, SZ, cooling, scanlines)
+// only change: empty cells are transparent so the fire sits over the fallen pieces
+function startFire(ceilPx,floorPx){
+  var canvas=document.getElementById("fo-fire");
+  canvas.width=win.innerWidth; canvas.height=floorPx; canvas.style.top='0px'; canvas.style.bottom='auto'; canvas.style.height=floorPx+'px';
+  canvas.classList.add("on");
+  var ctx=canvas.getContext("2d");
+  var W=canvas.width,H=canvas.height,SZ=8;
+  var COLS=Math.ceil(W/SZ),ROWS=Math.ceil(H/SZ);
+  var PAL=["#000000","#110000","#220000","#440000","#660000","#880000","#aa1100","#cc3300","#ee5500","#ff6600","#ff8800","#ffaa00","#ffcc00","#ffee00","#ffff66","#ffffff"];
+  var MAX=PAL.length-1;
+  var grid=new Uint8Array(COLS*ROWS);
+  var ceilRow=Math.max(0,Math.floor(ceilPx/SZ));
+  for(var c=0;c<COLS;c++) grid[(ROWS-1)*COLS+c]=MAX;
+  var sl=document.createElement("canvas"); sl.width=W; sl.height=H;
+  var sc=sl.getContext("2d"); sc.fillStyle="rgba(0,0,0,0.18)";
+  for(var y=0;y<H;y+=2) sc.fillRect(0,y,W,1);
+  var tick=0;
+  function frame(){ simTick(); drawIt(); requestAnimationFrame(frame); }
+  function simTick(){
+    tick++;
+    if(tick%2===0){
+      for(var c=0;c<COLS;c++) grid[(ROWS-1)*COLS+c]=MAX-(Math.random()<0.3?1:0);
+      for(var row=ceilRow;row<ROWS-1;row++){
+        for(var col=0;col<COLS;col++){
+          var below=grid[(row+1)*COLS+col];
+          var decay=Math.floor(Math.random()*3);
+          var drift=Math.floor(Math.random()*3)-1;
+          var tc=col+drift; if(tc<0)tc=0; if(tc>=COLS)tc=COLS-1;
+          var nv=below-decay; if(nv<0)nv=0;
+          grid[row*COLS+tc]=nv;
+        }
       }
+    }
+  }
+  function drawIt(){
+    ctx.clearRect(0,0,W,H);
+    for(var row=0;row<ROWS;row++) for(var col=0;col<COLS;col++){
+      var v=grid[row*COLS+col];
+      if(v>2){ ctx.fillStyle=PAL[v]; ctx.fillRect(col*SZ,row*SZ,SZ,SZ); }
+    }
+    ctx.globalCompositeOperation="source-atop"; ctx.drawImage(sl,0,0); ctx.globalCompositeOperation="source-over";
+  }
+  var ff=+params.get("ff")||0;
+  for(var i=0;i<ff;i++) simTick();
+  frame();
+}
 
-      // Dotted trail — every 3rd point, fading out toward the back
-      for (var j = 0; j < b.trail.length; j++) {
-        if (j % 3 !== 0) continue;
-        var alpha = (j / b.trail.length) * 0.7;
-        ctx.fillStyle = "rgba(255,255,255," + alpha.toFixed(2) + ")";
-        ctx.fillRect(Math.floor(b.trail[j].x), Math.floor(b.trail[j].y), 2, 2);
-      }
-
-      // Bat sprite
-      var f  = BAT_FRAMES[b.frame];
-      var bx = Math.floor(b.x - BAT_W / 2);
-      var by = Math.floor(b.y - BAT_H / 2);
-      ctx.fillStyle = batsPaused ? "#FF134E" : "#ffffff";
-      for (var row = 0; row < BAT_ROWS_H; row++) {
-        for (var col = 0; col < BAT_COLS; col++) {
-          if (f[row][col]) {
-            ctx.fillRect(bx + col * BAT_PX, by + row * BAT_PX, BAT_PX, BAT_PX);
+function collapse(){
+  var items=collect();
+  var pieces=[];
+  var cx=win.innerWidth/2, cy=win.innerHeight/2;
+  items.forEach(function(it){
+    var el=it.el, r=it.r;
+    var n=el.cloneNode(true);
+    if (it.shallow){ while(n.firstChild) n.removeChild(n.firstChild); }
+    n.removeAttribute("id");
+    var cs=getComputedStyle(el);
+    n.className=(el.className&&typeof el.className==="string"?el.className+" ":"")+"fo-piece";
+    n.style.cssText+=";position:fixed;left:0;top:0;margin:0;width:"+r.width+"px;height:"+r.height+"px;";
+    if(!it.shallow && cs.display==="inline") n.style.display="block";
+    if(it.shallow) n.style.background=cs.backgroundColor;
+    document.body.appendChild(n);
+    var dx=(r.left+r.width/2)-cx, dy=(r.top+r.height/2)-cy;
+    var d=Math.sqrt(dx*dx+dy*dy)||1;
+    var burst=(0.9+Math.random()*0.8)*Math.max(6,18-d/60);
+    pieces.push({n:n,x:r.left,y:r.top,w:r.width,h:r.height,
+      vx:dx/d*burst+(Math.random()-.5)*5, vy:dy/d*burst-6-Math.random()*7,
+      rot:0, vr:(Math.random()-.5)*0.14, landed:false, heat:0});
+  });
+  document.body.classList.add("fo-go");
+  document.body.classList.add("fo-done");
+  // fade fixed originals (site hidden by class)
+  var G=0.55, floor=getFloor(), last=performance.now(), t0=last, fireOn=false;
+  var copy=document.getElementById("fo-copy");
+  copy.classList.add("on");
+  var copyBottom=copy.getBoundingClientRect().bottom;
+  var settled=0;
+  var ffs=+params.get("ff")||0;
+  function step(now){
+    var dt=Math.min(2,(now-last)/16.67); last=now;
+    if(ffs){ dt=1; }
+    settled=0;
+    pieces.forEach(function(p){
+      if(p.landed){ settled++; }
+      else{
+        p.py=p.y; p.vy+=G*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.vr*dt;
+        if(p.x<0){p.x=0;p.vx*=-.5;} if(p.x+p.w>win.innerWidth){p.x=win.innerWidth-p.w;p.vx*=-.5;}
+        var land=null;
+        for(var qi=0;qi<pieces.length&&land===null;qi++){
+          var q=pieces[qi]; if(q===p||!q.landed) continue;
+          if(p.x<q.x+q.w-1 && p.x+p.w>q.x+1 && p.y<q.y+q.h && p.y+p.h>q.y){
+            if(p.py+p.h<=q.y+6+Math.max(0,p.vy)){ land=q.y; }
+            else { var left=(p.x+p.w/2)<(q.x+q.w/2); p.x=left?q.x-p.w:q.x+q.w; p.vx=-p.vx*0.4; }
           }
         }
-      }
-    }
-
-    batAnim = requestAnimationFrame(frame);
-  }
-  frame();
-
-  // Capture-phase listener so we intercept the click before anything beneath
-  _batClickHandler = function(e) {
-    if (!batsRunning || batsPaused || batDiscount) return;
-    var pad = 10;
-    for (var i = 0; i < bats.length; i++) {
-      var b = bats[i];
-      if (e.clientX >= b.x - BAT_W / 2 - pad &&
-          e.clientX <= b.x + BAT_W / 2 + pad &&
-          e.clientY >= b.y - BAT_H / 2 - pad &&
-          e.clientY <= b.y + BAT_H / 2 + pad) {
-        e.stopPropagation();
-        batDiscount = true;
-        batsPaused = true;
-        var toast = document.getElementById("bat-toast");
-        toast.className = "bat-toast on";
-        setTimeout(function() {
-          toast.className = "bat-toast";
-          batsPaused = false;
-        }, 5000);
-        return;
-      }
-    }
-  };
-  document.addEventListener("click", _batClickHandler, true);
-}
-
-function stopBats() {
-  batsRunning = false;
-  batsPaused = false;
-  if (batAnim) { cancelAnimationFrame(batAnim); batAnim = null; }
-  if (_batClickHandler) {
-    document.removeEventListener("click", _batClickHandler, true);
-    _batClickHandler = null;
-  }
-  bats = [];
-  var canvas = document.getElementById("bat-canvas");
-  var ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-function setMode(m) {
-  document.body.className = m;
-  document.getElementById("m0").className = "mo" + (m === "heaven" ? " on" : "");
-  document.getElementById("m1").className = "mo" + (m === "hell" ? " on" : "");
-  document.getElementById("m2").className = "mo" + (m === "shll" ? " on" : "");
-  if (m === "shll") {
-    startFlames();
-  } else {
-    stopFlames();
-  }
-  if (m === "shll") {
-    startBats();
-  } else {
-    stopBats();
-  }
-}
-
-// ── 8-BIT PIXEL FIRE ENGINE ──────────────────────────────────
-function startFlames() {
-  if (flameRunning) return;
-  flameRunning = true;
-  var canvas = document.getElementById("flame-canvas");
-  var screen = document.getElementById("shll-screen");
-  canvas.width  = screen.offsetWidth  || 460;
-  canvas.height = screen.offsetHeight || 600;
-  var ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-  var W = canvas.width, H = canvas.height;
-
-  // Chunky pixel size — gives the 8-bit block look
-  var SZ = 8;
-  var COLS = Math.ceil(W / SZ);
-  var ROWS = Math.ceil(H / SZ);
-
-  // 16-step hard palette: black → deep red → orange → yellow → white
-  var PAL = [
-    "#000000","#110000","#220000","#440000",
-    "#660000","#880000","#aa1100","#cc3300",
-    "#ee5500","#ff6600","#ff8800","#ffaa00",
-    "#ffcc00","#ffee00","#ffff66","#ffffff"
-  ];
-  var MAX = PAL.length - 1;
-
-  // Heat grid
-  var grid = new Uint8Array(COLS * ROWS);
-
-  // Measure headline position to set the flame ceiling
-  var headline = document.querySelector(".shll-copy");
-  var screenRect = screen.getBoundingClientRect();
-  var headRect   = headline.getBoundingClientRect();
-  var ceilPx  = headRect.top - screenRect.top - 14;
-  var ceilRow = Math.max(0, Math.floor(ceilPx / SZ));
-
-  // Seed: full bottom row at max heat
-  for (var c = 0; c < COLS; c++) {
-    grid[(ROWS - 1) * COLS + c] = MAX;
-  }
-
-  // Scanline overlay — drawn once into an offscreen canvas so we don't
-  // recompute it every frame
-  var slCanvas = document.createElement("canvas");
-  slCanvas.width = W; slCanvas.height = H;
-  var slCtx = slCanvas.getContext("2d");
-  slCtx.fillStyle = "rgba(0,0,0,0.18)";
-  for (var y = 0; y < H; y += 2) slCtx.fillRect(0, y, W, 1);
-
-  var tick = 0;
-
-  function frame() {
-    if (!flameRunning) return;
-    tick++;
-
-    // Run simulation every other RAF tick (~30fps) for retro choppiness
-    if (tick % 2 === 0) {
-      // Flicker the heat source at the bottom
-      for (var c = 0; c < COLS; c++) {
-        grid[(ROWS - 1) * COLS + c] = MAX - (Math.random() < 0.3 ? 1 : 0);
-      }
-
-      // Cellular automaton: each cell cools from the cell below it.
-      // Only update from ceilRow down so flames never cross the headline.
-      for (var row = ceilRow; row < ROWS - 1; row++) {
-        for (var col = 0; col < COLS; col++) {
-          var below = grid[(row + 1) * COLS + col];
-          // Decay 0-2, drift left/right by 0-1 — keeps it blocky
-          var decay = Math.floor(Math.random() * 3);
-          var drift = Math.floor(Math.random() * 3) - 1;
-          var tc = col + drift;
-          if (tc < 0) tc = 0;
-          if (tc >= COLS) tc = COLS - 1;
-          var nv = below - decay;
-          if (nv < 0) nv = 0;
-          grid[row * COLS + tc] = nv;
+        if(land===null && p.y+p.h>=floor){ land=floor; }
+        if(land!==null){
+          p.y=land-p.h; p.vy*=-0.3; p.vx*=0.7; p.vr*=0.6;
+          if(Math.abs(p.vy)<1.8){ p.vy=0; p.vx=0; p.vr=0; p.landed=true; p.rot=0; }
         }
       }
-    }
-
-    // Draw black background
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, W, H);
-
-    // Draw pixel blocks
-    for (var row = 0; row < ROWS; row++) {
-      for (var col = 0; col < COLS; col++) {
-        var v = grid[row * COLS + col];
-        if (v > 0) {
-          ctx.fillStyle = PAL[v];
-          ctx.fillRect(col * SZ, row * SZ, SZ, SZ);
-        }
-      }
-    }
-
-    // CRT scanlines overlay
-    ctx.drawImage(slCanvas, 0, 0);
-
-    flameAnim = requestAnimationFrame(frame);
+      if(p.y+p.h>floor-40 && p.heat<1){ p.heat=Math.min(1,p.heat+0.015*dt); }
+      p.n.style.transform="translate("+p.x+"px,"+p.y+"px) rotate("+p.rot+"rad)";
+      if(p.heat>0){ var b=1-p.heat*0.75; p.n.style.filter="brightness("+b.toFixed(2)+") sepia("+(p.heat*.8).toFixed(2)+")"; }
+    });
+    if(!fireOn && now-t0>700){ fireOn=true; startFire(copyBottom+24,floor); }
+    requestAnimationFrame(step);
   }
-  frame();
+  requestAnimationFrame(step);
 }
 
-function stopFlames() {
-  flameRunning = false;
-  if (flameAnim) { cancelAnimationFrame(flameAnim); flameAnim = null; }
+var started=false;
+function boot(){
+  if(started) return; started=true; 
+  if(reduce){ showFinal(); return; }
+  setTimeout(function(){ try{  collapse(); }catch(e){ console.error(e); } }, DELAY);
+}
+if(document.readyState==="complete") boot(); else win.addEventListener("load", boot);
+setTimeout(boot, 1500);
+
 }
 
-// ── ABOUT TABS ───────────────────────────────────────────────
-function setAboutTab(i) {
-  for (var t = 0; t < 3; t++) {
-    document.getElementById("atab" + t).className = "atab" + (t === i ? " on" : "");
-    document.getElementById("acontent" + t).className = "atab-content" + (t === i ? " on" : "");
-  }
-}
-
-// ── PRODUCT / MERCH DETAIL ───────────────────────────────────
-function showProd(idx) {
-  cur = idx;
-  var p = null;
-  for (var i = 0; i < PRODS.length; i++) { if (PRODS[i].id === idx) { p = PRODS[i]; break; } }
-  if (!p) return;
-  var isMerch = p.type === "merch";
-  document.getElementById("pcrumb").textContent = isMerch ? "// merch / " + p.name.toLowerCase() : "// shop / " + (idx === 0 ? "001" : "002");
-  document.getElementById("pnum").textContent = p.num;
-  document.getElementById("pname").textContent = p.name;
-  document.getElementById("ptag").textContent = p.tag;
-  document.getElementById("pdesc").textContent = p.desc;
-  document.getElementById("prat").textContent = p.rat;
-  document.getElementById("pmk2").textContent = isMerch ? "Origin" : "Region";
-  document.getElementById("preg").textContent = p.reg;
-  document.getElementById("pmk3").textContent = isMerch ? "Size" : "Format";
-  document.getElementById("pfmt").textContent = p.fmt;
-  document.getElementById("pstk").textContent = p.stk;
-  document.getElementById("pprice").textContent = "$" + p.price.toFixed(2);
-  document.getElementById("atcbtn").textContent = "Add to Cart";
-  document.getElementById("atcbtn").className = "atcb";
-  go("product");
-}
-
-function addCart() {
-  var p = null;
-  for (var i = 0; i < PRODS.length; i++) { if (PRODS[i].id === cur) { p = PRODS[i]; break; } }
-  if (!p) return;
-  if (!cart[p.id]) cart[p.id] = {p:p, q:0};
-  cart[p.id].q++;
-  updCnt();
-  document.getElementById("atcbtn").textContent = "// Added. Go Harder";
-  document.getElementById("atcbtn").className = "atcb done";
-  setTimeout(function(){ showCart(); }, 700);
-}
-
-function updCnt() {
-  var n = 0;
-  for (var k in cart) n += cart[k].q;
-  document.getElementById("cnt").textContent = n;
-}
-
-function showCart() { renderCart(); go("cart"); }
-
-function renderCart() {
-  var keys = Object.keys(cart);
-  var el = document.getElementById("cartbody");
-  if (!keys.length) {
-    el.innerHTML = "<div class='cem'>// cart is empty.<br>fix that.</div><button class='csb' id='back-shop' style='margin-top:16px'>Back to shop</button>";
-    document.getElementById("back-shop").onclick = function(){ go("home"); };
-    return;
-  }
-  var tot = 0, h = "<div class='ch'>// your order</div>";
-  for (var i = 0; i < keys.length; i++) {
-    var it = cart[keys[i]], sub = it.p.price * it.q;
-    tot += sub;
-    h += "<div class='ci'><div class='cin'>" + it.p.name + "</div><div class='cis'>" + it.p.tag + "</div><div class='crow'><button class='qb' data-id='" + it.p.id + "' data-d='-1'>-</button><span class='qn'>" + it.q + "</span><button class='qb' data-id='" + it.p.id + "' data-d='1'>+</button><span class='cip'>$" + sub.toFixed(2) + "</span></div></div>";
-  }
-  if (batDiscount) {
-    h += "<div class='ctot' style='color:var(--ink3);font-size:11px'><span>Subtotal</span><span>$" + tot.toFixed(2) + "</span></div>";
-    h += "<div class='ctot' style='color:var(--hi);font-size:11px'><span>// bat discount</span><span>-$" + (tot * 0.1).toFixed(2) + "</span></div>";
-    h += "<div class='ctot'><span>Total</span><span>$" + (tot * 0.9).toFixed(2) + "</span></div>";
-  } else {
-    h += "<div class='ctot'><span>Total</span><span>$" + tot.toFixed(2) + "</span></div>";
-  }
-  h += "<button class='ckb' id='chkbtn'>Destroy My Wallet</button><button class='csb' id='kshop'>Keep Shopping</button>";
-  el.innerHTML = h;
-  document.getElementById("kshop").onclick = function(){ go("home"); };
-  var qbtns = el.querySelectorAll(".qb");
-  for (var j = 0; j < qbtns.length; j++) {
-    qbtns[j].onclick = function() {
-      var id = parseInt(this.getAttribute("data-id"));
-      var d = parseInt(this.getAttribute("data-d"));
-      if (!cart[id]) return;
-      cart[id].q += d;
-      if (cart[id].q <= 0) delete cart[id];
-      updCnt(); renderCart();
-    };
-  }
-}
-
-// ── EVENT WIRING ─────────────────────────────────────────────
-document.getElementById("go-home").onclick = function(){ go("home"); };
-document.getElementById("go-about").onclick = function(){ go("about"); };
-document.getElementById("go-shop").onclick = function(){ go("shop"); };
-document.getElementById("go-merch").onclick = function(){ go("merch"); };
-document.getElementById("go-gang").onclick = function(){ go("gang"); };
-document.getElementById("go-cart").onclick = function(){ showCart(); };
-
-document.getElementById("m0").onclick = function(){ setMode("heaven"); };
-document.getElementById("m1").onclick = function(){ setMode("hell"); };
-document.getElementById("m2").onclick = function(){ setMode("shll"); };
-
-document.getElementById("pt0").onclick = function(){ showProd(0); };
-document.getElementById("pt1").onclick = function(){ showProd(1); };
-document.getElementById("pc0").onclick = function(e){ e.stopPropagation(); showProd(0); };
-document.getElementById("pc1").onclick = function(e){ e.stopPropagation(); showProd(1); };
-document.getElementById("spt0").onclick = function(){ showProd(0); };
-document.getElementById("spt1").onclick = function(){ showProd(1); };
-document.getElementById("spc0").onclick = function(e){ e.stopPropagation(); showProd(0); };
-document.getElementById("spc1").onclick = function(e){ e.stopPropagation(); showProd(1); };
-
-document.getElementById("mpt0").onclick = function(){ showProd(10); };
-document.getElementById("mpt1").onclick = function(){ showProd(11); };
-document.getElementById("mpt2").onclick = function(){ showProd(12); };
-document.getElementById("mpt3").onclick = function(){ showProd(13); };
-document.getElementById("mpc0").onclick = function(e){ e.stopPropagation(); showProd(10); };
-document.getElementById("mpc1").onclick = function(e){ e.stopPropagation(); showProd(11); };
-document.getElementById("mpc2").onclick = function(e){ e.stopPropagation(); showProd(12); };
-document.getElementById("mpc3").onclick = function(e){ e.stopPropagation(); showProd(13); };
-
-document.getElementById("xshop").onclick = function(){ go("home"); };
-document.getElementById("xabout").onclick = function(){ go("home"); };
-document.getElementById("xprod").onclick = function(){ go("home"); };
-document.getElementById("xcart").onclick = function(){ go("home"); };
-document.getElementById("xmerch").onclick = function(){ go("home"); };
-document.getElementById("xgang").onclick = function(){ go("home"); };
-
-document.getElementById("atcbtn").onclick = function(){ addCart(); };
-document.getElementById("seml").oninput = function(){
-  document.getElementById("sconf").style.display = "none";
-};
-document.getElementById("sbbtn").onclick = function(){
-  var v = document.getElementById("seml").value.trim();
-  if (v && v.indexOf("@") > -1) {
-    if (v !== lastEmail) {
-      document.getElementById("sconf").style.display = "block";
-      lastEmail = v;
-    }
-    document.getElementById("seml").value = "";
-    document.getElementById("fr-lock").style.display = "none";
-    document.getElementById("fr-form").className = "frf on";
-  }
-};
-
-// Star rating picker
-(function(){
-  var stars = document.querySelectorAll("#fr-stars .frstar");
-  function paint(n) {
-    for (var i = 0; i < stars.length; i++) {
-      stars[i].className = "frstar" + (i < n ? " on" : "");
-    }
-  }
-  for (var i = 0; i < stars.length; i++) {
-    (function(idx){
-      stars[idx].onmouseover = function(){ paint(idx + 1); };
-      stars[idx].onmouseout  = function(){ paint(frRating); };
-      stars[idx].onclick     = function(){ frRating = idx + 1; paint(frRating); };
-    })(i);
-  }
-})();
-
-document.getElementById("fr-pub").onclick = function(){
-  if (frCollapsed) {
-    document.getElementById("fr-fields").style.display = "block";
-    this.textContent = "// Publish Report";
-    frCollapsed = false;
-    return;
-  }
-  var name   = document.getElementById("fr-name").value.trim();
-  var loc    = document.getElementById("fr-loc").value.trim();
-  var review = document.getElementById("fr-review").value.trim();
-  var err    = document.getElementById("fr-err");
-  if (!name || !loc || !review || !frRating) {
-    err.style.display = "block";
-    return;
-  }
-  err.style.display = "none";
-  var filled = "&#9733;".repeat(frRating);
-  var empty  = "&#9734;".repeat(5 - frRating);
-  var div = document.createElement("div");
-  div.className = "r";
-  div.innerHTML = "<div class='rs'>" + filled + empty + "</div>" +
-                  "<div class='rb'>\"" + review.replace(/</g,"&lt;") + "\"</div>" +
-                  "<div class='ra'>&mdash; " + name.replace(/</g,"&lt;") + ", " + loc.replace(/</g,"&lt;") + "</div>";
-  var container = document.getElementById("fr-reviews");
-  container.insertBefore(div, container.firstChild);
-  document.getElementById("fr-name").value = "";
-  document.getElementById("fr-loc").value = "";
-  document.getElementById("fr-review").value = "";
-  frRating = 0;
-  var stars = document.querySelectorAll("#fr-stars .frstar");
-  for (var i = 0; i < stars.length; i++) stars[i].className = "frstar";
-  document.getElementById("fr-fields").style.display = "none";
-  this.textContent = "// File Another Report";
-  frCollapsed = true;
-};
-
-document.getElementById("atab0").onclick = function(){ setAboutTab(0); };
-document.getElementById("atab1").onclick = function(){ setAboutTab(1); };
-document.getElementById("atab2").onclick = function(){ setAboutTab(2); };
+runFallApart(window);
 </script>
 </body>
 </html>
